@@ -1,42 +1,49 @@
-name: CI/CD pipeline to Docker Hub and AWS EC2
+name: CI model to dockerhub
 
+# Trigger
 on:
   push:
     branches:
-      - main
+      -dev
   pull_request:
     branches:
-      - main
+      - dev
 
+# Actions
 jobs:
-  build_and_deploy:
+  build_docker_image:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v2
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build docker image
-        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/prediccion-emociones:latest .
+        run: docker build -t predict-emociones:latest .
 
       - name: Docker push to Dockerhub
-        run: docker push ${{ secrets.DOCKER_USERNAME }}/prediccion-emociones:latest
+        run: docker push predict-emociones:latest
+        
+      - name: Login into the server
+        run: echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-            docker stop prediccion-emociones || true
-            docker rm prediccion-emociones || true
-            docker pull ${{ secrets.DOCKER_USERNAME }}/prediccion-emociones:latest
-            docker run -d --name prediccion-emociones -p 8000:8000 ${{ secrets.DOCKER_USERNAME }}/prediccion-emociones:latest
+            docker login -u '${{ secrets.DOCKER_USERNAME }}' -p '${{ secrets.DOCKER_PASSWORD }}'
+            if docker ps --all | grep -q predict-emociones; then
+              docker stop predict-emociones
+              docker rm predict-emociones
+            fi
+            docker pull ${{ secrets.DOCKER_USERNAME }}/predict-emociones:latest
+            docker run -d --name predict-emociones -p 8000:8000 ${{ secrets.DOCKER_USERNAME }}/predict-emociones:latest
